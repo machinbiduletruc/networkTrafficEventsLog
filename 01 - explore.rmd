@@ -88,5 +88,32 @@ A first look at the above table allows to identify that the two last dataset fie
 The table also leads us to conclude that the initial following changes could later pay off when trying to derive the cyber attack prediction model.
   1. Change the port fields (SPORT and DSPORT) to be considered nominal fields as by nature a sequence would unlikely mean anything
   
-```{r dataset_structure}
+```{r further_exploration}
+for(i in 1:ncols) {
+    col <- df.events[ , i]
+    cat(paste('\n----------------------------\nDetails of variable', i, '[', trimstr(colnames[i]), ']:\n'), fill = TRUE)
+    cat(paste('   Data type:', features[i, 2]), fill = TRUE)
+    cat(paste('   Field description:', features[i, 3], '\n'), fill = TRUE)
+    datatype <- class(col)
+    colsummary <- summary(col) 
+    nmissingvals <- sum(!is.finite(col)) # 'is.finite()' function is used to identify non-NA and non-NaN values
+    cat(paste(datatype, str(col), '\n'), fill = TRUE)
+    if (datatype == "character" || features[i, 2] == 'timestamp' || features[i, 2] == 'binary' 
+        || features[i, 2] == 'nominal'){
+        values <- levels(factor(col)) # Getting the values
+        values.dis <- data.frame(table(col)) # Getting values distribution
+        values.dis <- values.dis[order(values.dis$Freq, decreasing=TRUE),] # Reordering df based on Frequency DESC
+        colnames(values.dis)[1] <- "Values"
+        if(nrow(values.dis)>=30){
+            print(values.dis[1:30,], row.names = FALSE)
+            cat("...", fill = TRUE)
+        }else{
+            print(values.dis, row.names = FALSE)
+        }
+    }else{
+        print(colsummary)
+        boxplot(col, na.rm = TRUE)
+    }
+    cat(paste('\nNumber of Missing values:', nmissingvals, '\n'))
+}
 ```
