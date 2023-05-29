@@ -1,0 +1,126 @@
+---
+title: "Exploration of the events.csv dataset"
+author: "Daniel Da Graça"
+date: "27/05/2023"
+output: 
+  html_document: 
+    output_dir: ../output
+    highlight: tango
+    theme: cosmo
+    keep_md: yes
+---
+
+```{r project_setup, include=FALSE, results='hide'}
+knitr::opts_chunk$set(echo = TRUE)
+# Packages required for the project
+required_packages <- c('rstudioapi', 'fs', 'stringr', 'knitr')
+# Installation of all required packages not already installed
+install.packages(setdiff(required_packages, rownames(installed.packages())))
+# Loading required packages
+library('rstudioapi', warn.conflicts = FALSE)
+library('fs', warn.conflicts = FALSE)
+library('stringr', warn.conflicts = FALSE)
+library('knitr', warn.conflicts = FALSE)
+
+#Get this rmd file current absolute path 
+#(from: https://stackoverflow.com/questions/47044068/get-the-path-of-current-script)
+if (rstudioapi::isAvailable()) {
+    wdir <- dirname(getActiveDocumentContext()$path)
+}else{
+    wdir <- getwd()
+}
+wdir <- stringr::str_trim(paste(head(strsplit(wdir, "/")[[1]], -1), collapse = "/"))
+if (fs::dir_exists(wdir)){
+    setwd(wdir)
+    codedir <- file.path(wdir, "code", fsep = .Platform$file.sep)
+    datadir <- file.path(wdir, "data")
+    outputdir <- file.path(wdir, "output")
+    features <- file.path(datadir, "features.csv")
+    tryCatch(expr = {
+                      source(file.path(codedir, "myutils.R"))
+                      debugprint(c('Working dir is:', wdir))
+                    }
+             , error = function(e){print(e)}
+             , warning = function(w){print(w)})
+    if (fs::dir_exists(codedir)==FALSE){ 
+        print(paste('[PROBLEM] Unfound directory:', codedir))
+    }else if(fs::dir_exists(datadir)==FALSE){
+        print(paste('[PROBLEM] Unfound directory:', datadir))
+    }else if(fs::dir_exists(outputdir)==FALSE){
+        print(paste('[PROBLEM] Unfound directory:', outputdir))
+    }else if(fs::file_exists(features)==TRUE){
+        features <- read.csv(features, encoding = 'ANSI')
+        nfeatures <- nrow(features)
+        features <- features[,2:4]
+        colnames(features) <- c('Field', 'Type', 'Description')
+        features$Field <- apply(features[, 1, drop = FALSE], 2, function(val){toupper(val)})
+        features$Type <- apply(features[, 2, drop = FALSE], 2, function(val){tolower(val)})
+    }
+} else{
+    print(paste('[PROBLEM] Unfound directory:', wdir))
+}
+```
+
+# Loading 'events' dataset to get a first insight of its structure and contents
+The 'events' dataset contains firewall log records having been tagged whether they were normal network traffic or actually related to cyber attacks. 
+  - The file 'features.csv' was given to provide a description of the 'events' dataset fields. 
+  - It was loaded into a table to which an extra column was added to keep the <b><i>str()</b></i> output from the 'events' fields.
+  
+```{r loading_dataset}
+eventscsv <- file.path(datadir, "events_sample.csv") # File name needs changing here to use sample or full set
+if(fs::file_exists(eventscsv)==TRUE){
+    df.events <- read.csv(eventscsv)
+    ncols <- ncol(df.events)
+    nrows <- nrow(df.events)
+    colnames <- toupper(names(df.events))
+    cat(paste('The file contains', ncols, 'columns and', nrows, 'rows.\n'), fill=TRUE)
+    if(nfeatures == 49){ 
+        features = data.frame(features, Insight='') # Adding a column to keep the str() output
+        for(i in 1:nfeatures) {
+            features$Insight[i] <- capture.output(str(df.events[ , i]))
+        }
+    }else{
+        print(str(df.events))
+        print(summary(df.events))
+    }
+}else{
+    print(paste('[PROBLEM] Unfound file:', datadir))
+}
+print(features)
+knitr::kable(features, encoding = "ASCII")
+```
+
+## First amendments and follow-up exploration of the 'events' dataset 
+A first look at the above table allows to identify that the two last dataset fiels (ATTACK_CAT and LABEL) are most likely two response columns that will help to derive to derive a way or a model to predict the probability of facing a cyber attack based on the type of network traffic captured from this 'events' log.
+The table also leads us to conclude that the initial following changes could later pay off when trying to derive the cyber attack prediction model.
+  1. Change the port fields (SPORT and DSPORT) to be considered nominal fields as by nature a sequence would unlikely mean anything
+  
+```{r further_exploration}
+for(i in 1:ncols) {
+    col <- df.events[ , i]
+    cat(paste('\n----------------------------\nDetails of variable', i, '[', trimstr(colnames[i]), ']:\n'), fill = TRUE)
+    cat(paste('   Data type:', features[i, 2]), fill = TRUE)
+    cat(paste('   Field description:', features[i, 3], '\n'), fill = TRUE)
+    datatype <- class(col)
+    colsummary <- summary(col) 
+    nmissingvals <- sum(!is.finite(col)) # 'is.finite()' function is used to identify non-NA and non-NaN values
+    cat(paste(datatype, str(col), '\n'), fill = TRUE)
+    cat(paste('\nNumber of Missing values:', nmissingvals, '\n'))
+    if (datatype == "character" || features[i, 2] == 'timestamp' || features[i, 2] == 'binary' 
+        || features[i, 2] == 'nominal'){
+        values <- levels(factor(col)) # Getting the values
+        values.dis <- data.frame(table(col)) # Getting values distribution
+        values.dis <- values.dis[order(values.dis$Freq, decreasing=TRUE),] # Reordering df based on Frequency DESC
+        colnames(values.dis)[1] <- "Values"
+        if(nrow(values.dis)>=30){
+            print(values.dis[1:30,], row.names = FALSE)
+            cat("...", fill = TRUE)
+        }else{
+            print(values.dis, row.names = FALSE)
+        }
+    }else{
+        print(colsummary)
+        boxplot(col, na.rm = TRUE)
+    }
+}
+```
